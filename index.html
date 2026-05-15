@@ -78,8 +78,9 @@
 
   /* ---- 印刷用 ---- */
   #print-area{display:none}
+  @page { size: A4; margin: 0; }
   @media print {
-    body{background:#fff}
+    html, body{margin:0 !important;padding:0 !important;background:#fff}
     .topbar, .container, .bottom-bar, .sheet{display:none !important}
     #print-area{display:block !important}
     .print-page{page-break-after:always;padding:18mm 14mm;font-size:12px}
@@ -1135,6 +1136,7 @@ function openPrintWindow(html){
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>印刷</title>
 <style>
+  @page { size: A4; margin: 0; }
   body{margin:0;padding:0;font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Apple Color Emoji", "Segoe UI Emoji";}
   .print-page{page-break-after:always;padding:18mm 14mm;font-size:12px}
   .print-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8mm}
@@ -1147,7 +1149,7 @@ function openPrintWindow(html){
   .print-sum{display:flex;justify-content:flex-end;margin-top:6mm;font-size:14px;font-weight:900}
   .nowrap{white-space:nowrap}
   .org-block{font-size:12px;line-height:1.5}
-  @media print {.noprint{display:none}}
+  @media print {html, body{margin:0 !important;padding:0 !important}.noprint{display:none}}
 /* tel/fax autolink hardening */
 a[href^="tel"], a[href^="tel"]:visited,
 a[href^="fax"], a[href^="fax"]:visited {
