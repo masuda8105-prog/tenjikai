@@ -85,7 +85,8 @@
     .print-page{page-break-after:always;padding:18mm 14mm;font-size:12px}
     .print-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8mm}
     .print-title{font-size:18px;font-weight:900;letter-spacing:.08em}
-    .print-info{font-size:12px;color:#111}
+    .print-info{font-size:14px;line-height:1.6;color:#111}
+    .print-side{font-size:14px;line-height:1.6;color:#111}
     .print-table{width:100%;border-collapse:collapse;margin-top:6mm}
     .print-table th, .print-table td{border:1px solid #333;padding:6px 8px;vertical-align:top}
     .print-table th{background:#f2f2f2}
@@ -523,6 +524,11 @@ TEL：03-3832-0051　FAX：03-3834-0667</textarea></div>
     return isNaN(n) ? 0 : n;
   };
   const escapeHtml = (str)=> String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
+  function customerNameWithHonorific(){
+    const name = String(custName()?.value || '').trim();
+    if(!name) return '';
+    return /様$/.test(name) ? name : `${name}様`;
+  }
   const productCount = (count)=> Number(count || 0).toLocaleString('ja-JP');
 
   function setProductLoadStatus(kind, count){
@@ -1030,13 +1036,13 @@ TEL：03-3832-0051　FAX：03-3834-0667</textarea></div>
         <div class="print-head">
           <div>
             <div class="print-title">${title}</div>
-            <div class="print-info">発行日：${dateStr}</div>
-            <div class="print-info">お客様：${escapeHtml(custName()?.value || '')}　${escapeHtml(custDept()?.value || '')}</div>
-            <div class="print-info">帳合先：${escapeHtml(getCustAccountValue() || '')}</div>
-            <div class="print-info">住所：${escapeHtml(custAddr()?.value || '')}</div>
-            <div class="print-info">TEL：${escapeHtml(custTel()?.value || '')}</div>
+            <div class="print-info"><strong>発行日：</strong>${dateStr}</div>
+            <div class="print-info"><strong>お客様：</strong>${escapeHtml(customerNameWithHonorific())}　${escapeHtml(custDept()?.value || '')}</div>
+            <div class="print-info"><strong>帳合先：</strong>${escapeHtml(getCustAccountValue() || '')}</div>
+            <div class="print-info"><strong>住所：</strong>${escapeHtml(custAddr()?.value || '')}</div>
+            <div class="print-info"><strong>TEL：</strong>${escapeHtml(custTel()?.value || '')}</div>
           </div>
-          <div style="text-align:right;max-width:60%">${rightBlock}</div>
+          <div class="print-side" style="text-align:right;max-width:60%">${rightBlock}</div>
         </div>
         ${table}
         <div class="print-sum">合計金額（税抜）：${yen(sum)}</div>
@@ -1094,13 +1100,13 @@ TEL：03-3832-0051　FAX：03-3834-0667</textarea></div>
         <div class="print-head">
           <div>
             <div class="print-title">${title}</div>
-            <div class="print-info">Issued on: ${dateStr}</div>
-            <div class="print-info">Customer: ${escapeHtml(custName()?.value || '')}　${escapeHtml(custDept()?.value || '')}</div>
-            <div class="print-info">Account: ${escapeHtml(getCustAccountValue() || '')}</div>
-            <div class="print-info">Address: ${escapeHtml(custAddr()?.value || '')}</div>
-            <div class="print-info">TEL: ${escapeHtml(custTel()?.value || '')}</div>
+            <div class="print-info"><strong>Issued on:</strong> ${dateStr}</div>
+            <div class="print-info"><strong>Customer:</strong> ${escapeHtml(customerNameWithHonorific())}　${escapeHtml(custDept()?.value || '')}</div>
+            <div class="print-info"><strong>Account:</strong> ${escapeHtml(getCustAccountValue() || '')}</div>
+            <div class="print-info"><strong>Address:</strong> ${escapeHtml(custAddr()?.value || '')}</div>
+            <div class="print-info"><strong>TEL:</strong> ${escapeHtml(custTel()?.value || '')}</div>
           </div>
-          <div style="text-align:right;max-width:60%">${rightBlock}</div>
+          <div class="print-side" style="text-align:right;max-width:60%">${rightBlock}</div>
         </div>
         ${table}
         <div class="print-sum">Subtotal (excl. tax): ${yen(sum)}</div>
@@ -1111,10 +1117,12 @@ TEL：03-3832-0051　FAX：03-3834-0667</textarea></div>
 
   
   function buildPrintDocument(){
+    // 印刷順はお客様控えを先頭、会社控えを2枚目に固定。
     document.getElementById('print-area').innerHTML = buildPage('お客様控え') + buildPage('会社控え');
   }
 
   function buildPrintDocumentIntl(){
+    // 外国人向け印刷もお客様控えを先頭、会社控えを2枚目に固定。
     document.getElementById('print-area').innerHTML = buildPageEN('Customer Copy') + buildPage('会社控え');
   }
 function openPrintWindow(html){
@@ -1131,7 +1139,8 @@ function openPrintWindow(html){
   .print-page{page-break-after:always;padding:18mm 14mm;font-size:12px}
   .print-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8mm}
   .print-title{font-size:18px;font-weight:900;letter-spacing:.08em}
-  .print-info{font-size:12px;color:#111}
+  .print-info{font-size:14px;line-height:1.6;color:#111}
+  .print-side{font-size:14px;line-height:1.6;color:#111}
   .print-table{width:100%;border-collapse:collapse;margin-top:6mm}
   .print-table th, .print-table td{border:1px solid #333;padding:6px 8px;vertical-align:top}
   .print-table th{background:#f2f2f2}
