@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="format-detection" content="telephone=no">
+<title>展示会：検索＆合計（最小UI＋印刷/OCR β）</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js" defer></script>
+<style>
+  :root{
+    --bg:#fafbff; --panel:#ffffff; --ink:#0f172a; --muted:#64748b;
+    --brand:#2563eb; --accent:#059669; --danger:#ef4444; --border:#e5e7eb;
+    --exact:#fde68a; --exact-border:#f59e0b;
+    --shadow:0 4px 14px rgba(2,6,23,.06); --radius:14px; --pad:12px;
+    --font: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji","Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic UI";
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-text-size-adjust:100%}
+  body{font-size:14px;}
+  .topbar{position:sticky;top:0;z-index:30;background:rgba(250,251,255,.92);backdrop-filter:saturate(1.2) blur(6px);border-bottom:1px solid var(--border)}
+  .topbar-inner{max-width:1100px;margin:0 auto;display:flex;gap:8px;align-items:center;padding:8px var(--pad)}
+  .dataset{font-size:11px;color:#fff;background:#9ca3af;border-radius:999px;padding:3px 8px}
+  .spacer{flex:1}
+  .total-wrap{display:flex;align-items:baseline;gap:6px}
+  .total-label{font-weight:700;color:var(--muted);font-size:13px}
+  .total-amount{font-size:clamp(18px,3vw,24px);font-weight:900;letter-spacing:.02em}
+  .container{max-width:1100px;margin:0 auto;padding:14px var(--pad) 120px}
+  .layout{display:grid;gap:14px;grid-template-columns:1fr}
+  @media(min-width:900px){ .layout{grid-template-columns: 1.1fr .9fr;} }
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;}
+  .section-title{font-size:12px;color:var(--muted);font-weight:800;letter-spacing:.04em;margin:0 0 8px}
+  input[type="text"], input[type="number"], textarea, select{
+    width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
+    font-size:14px;line-height:1.2;min-height:40px;background:#fff;
+  }
+  textarea{min-height:80px;resize:vertical}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .btn{appearance:none;border:1px solid var(--border);background:#fff;color:var(--ink);
+    padding:10px 12px;border-radius:10px;font-weight:700;cursor:pointer;min-height:40px;min-width:40px;font-size:14px;}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:var(--brand);color:#fff;border-color:transparent}
+  .btn.accent{background:var(--accent);color:#fff;border-color:transparent}
+  .btn.ghost{background:transparent}
+  .btn.danger{background:var(--danger);color:#fff;border-color:transparent}
+  
+  .searchbar{display:grid;grid-template-columns:1fr auto auto;gap:8px}
+  .results{display:grid;gap:8px;margin-top:10px}
+  .card{position:relative;display:grid;gap:8px;grid-template-columns:1fr auto;align-items:center;border:1px solid var(--border);border-radius:12px;padding:10px;background:#fff;cursor:pointer;touch-action:manipulation;}
+  .card.exact{border-color:var(--exact-border);background:linear-gradient( to right, rgba(245,158,11,.10), #fff 35% );}
+  .card.exact::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;border-radius:12px 0 0 12px;background:var(--exact-border);}
+  .badge-exact{font-size:10px;font-weight:800;color:#78350f;background:var(--exact);border:1px solid var(--exact-border);padding:1px 6px;border-radius:999px;margin-left:6px;}
+  .title-stack{min-width:0}
+  .code{font-weight:900;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .name{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .price{font-weight:800;white-space:nowrap;font-size:14px}
+  .order{display:grid;gap:8px}
+  .line{display:grid;gap:8px;grid-template-columns:1fr auto;align-items:center;border:1px solid var(--border);border-radius:12px;background:#fff;padding:10px;}
+  .title-two{min-width:0}
+  .title-two .code{font-size:14px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .title-two .name{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qty-mini{width:58px !important; min-height:36px !important; padding:6px 8px !important; font-size:14px !important;}
+  .muted{color:var(--muted)}
+  .hint{font-size:12px;color:var(--muted)}
+
+  .bottom-bar{position:fixed;left:0;right:0;bottom:0;background:rgba(249,250,251,.96);backdrop-filter:blur(6px);border-top:1px solid var(--border);z-index:40}
+  .bottom-inner{max-width:1100px;margin:0 auto;padding:8px var(--pad);display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+  .micro{font-size:12px;color:#6b7280}
+  .hidden{display:none !important}
+  .ops{display:flex;align-items:center;gap:8px}
+  .ops .price{font-weight:800;white-space:nowrap;font-size:14px}
+  .ops .qty-mini{width:58px !important; min-height:36px !important; padding:6px 8px !important; font-size:14px !important;}
+  @supports (-webkit-touch-callout: none) {
+    input[type="text"], input[type="number"], select, textarea { font-size:16px !important; }
+  }
+  html, body { overflow-x: hidden; }
+
+  /* ---- 印刷用 ---- */
+  #print-area{display:none}
+  @media print {
+    body{background:#fff}
+    .topbar, .container, .bottom-bar, .sheet{display:none !important}
+    #print-area{display:block !important}
+    .print-page{page-break-after:always;padding:18mm 14mm;font-size:12px}
+    .print-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8mm}
+    .print-title{font-size:18px;font-weight:900;letter-spacing:.08em}
+    .print-info{font-size:12px;color:#111}
+    .print-table{width:100%;border-collapse:collapse;margin-top:6mm}
+    .print-table th, .print-table td{border:1px solid #333;padding:6px 8px;vertical-align:top}
+    .print-table th{background:#f2f2f2}
+    .print-sum{display:flex;justify-content:flex-end;margin-top:6mm;font-size:14px;font-weight:900}
+    .nowrap{white-space:nowrap}
+    .org-block{font-size:12px;line-height:1.5}
+  }
+
+  /* ---- スライドシート ---- */
+  .sheet{position:fixed;left:0;right:0;bottom:0;top:0;display:flex;flex-direction:column;z-index:50;background:rgba(0,0,0,.2);backdrop-filter:blur(1px);}
+  .sheet.hidden{display:none}
+  .sheet-panel{margin-top:auto;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.12);border:1px solid var(--border)}
+  .sheet-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border)}
+  .sheet-title{font-weight:900}
+  .sheet-body{padding:14px;max-height:62vh;overflow:auto}
+  .grid-two{display:grid;gap:12px}
+  @media(min-width:900px){ .grid-two{grid-template-columns:1fr 1fr} }
+
+  /* ---- クイックキー ---- */
+  .quickbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .quickbar .qb{
+    appearance:none;border:1px solid var(--border);background:#f9fafb;color:#0f172a;
+    padding:6px 10px;border-radius:999px;font-size:13px;font-weight:800;cursor:pointer;
+  }
+  .quickbar .qb:active{transform:translateY(1px)}
+
+  /* ---- ミニ数字キーパッド ---- */
+  .mini-keypad-inline{
+    margin-top:6px;
+    display:grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap:6px;
+    max-width:280px;
+    margin-left:auto;
+  }
+  .mini-keypad-inline .k{
+    appearance:none; border:1px solid var(--border); background:#f3f4f6; color:#0f172a;
+    border-radius:10px;
+    min-height:44px;
+    font-size:16px;
+    font-weight:700; cursor:pointer; padding:8px 0;
+  }
+  .mini-keypad-inline .k:active{ transform:translateY(1px); }
+  .mini-keypad-inline .k-wide{ grid-column: span 3; }
+
+  .qty-badge{
+    position:absolute; right:8px; top:8px;
+    border:1px solid var(--border);
+    background:#f3f4f6; border-radius:999px;
+    font-size:11px; font-weight:800; padding:2px 6px;
+    pointer-events:none;
+  }
+
+  /* 入力フォーム幅に合わせたナロー版 */
+  .panel.narrow{ max-width: 680px; margin-left:auto; margin-right:auto; }
+  @media(min-width:1100px){
+    /* 左カラムで広がり過ぎないように */
+    .layout > .panel.narrow{ justify-self:start; }
+  }
+
+  .mini-keypad-inline.align-left{
+    margin-left:0;
+    margin-right:auto;
+  }
+/* tel/fax autolink hardening */
+a[href^="tel"], a[href^="tel"]:visited,
+a[href^="fax"], a[href^="fax"]:visited {
+  color: #111 !important;
+  text-decoration: none !important;
+}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <span id="dataset-name" class="dataset" aria-live="polite">未読込</span>
+      <div class="spacer"></div>
+      <div class="total-wrap" aria-live="polite">
+        <div class="total-label">合計</div>
+        <div id="grand-total" class="total-amount">¥0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="layout">
+      <!-- 左：検索 -->
+      <section class="panel">
+        <h2 class="section-title">検索</h2>
+        <div class="searchbar">
+          <input id="q" type="text" inputmode="none" readonly autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="品番 or 商品名の一部…（例：141-141-A）" />
+          <button id="btn-clear" type="button" class="btn">クリア</button>
+          <button id="btn-toggle-keypad" type="button" class="btn ghost micro" title="キーパッド左右切替">左右</button>
+        </div>
+        <div class="quickbar" id="quickbar"></div>
+
+        <div id="mini-kb-inline" class="mini-keypad-inline" role="group" aria-label="数字キーパッド">
+          <button class="k" data-key="1">1</button>
+          <button class="k" data-key="2">2</button>
+          <button class="k" data-key="3">3</button>
+          <button class="k" data-key="4">4</button>
+          <button class="k" data-key="5">5</button>
+          <button class="k" data-key="6">6</button>
+          <button class="k" data-key="7">7</button>
+          <button class="k" data-key="8">8</button>
+          <button class="k" data-key="9">9</button>
+          <button class="k" data-key="-">-</button>
+          <button class="k" data-key="0">0</button>
+          <button class="k" data-action="backspace">⌫</button>
+        </div>
+        <div id="results" class="results" aria-live="polite"></div>
+      </section>
+
+      <!-- 右：注文明細 -->
+      <section class="panel">
+        <h2 class="section-title">注文明細</h2>
+        <div id="order" class="order"></div>
+        <div class="row" style="margin-top:6px"><button id="btn-reset-order" type="button" class="btn danger">明細を全クリア</button>
+<button id="btn-add-shipping" type="button" class="btn">配送料金</button></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 印刷用領域 -->
+  <div id="print-area" aria-hidden="true"></div>
+
+  <!-- 最下部バー -->
+  <div class="bottom-bar">
+    <div class="bottom-inner">
+      <button id="btn-history" type="button" class="btn">履歴</button>
+      <button id="btn-settings" type="button" class="btn">設定</button>
+      <button id="btn-go-print" type="button" class="btn primary">お客様情報入力</button>
+      <button id="btn-clear-cust" type="button" class="btn danger">お客様情報クリア</button>
+      
+    </div>
+  </div>
+
+  <!-- 設定シート -->
+  <div id="sheet-settings" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sheet-settings-title">
+    <div class="sheet-panel">
+      <div class="sheet-header">
+        <div class="sheet-title" id="sheet-settings-title">設定</div>
+        <button class="btn" id="close-settings">閉じる</button>
+      </div>
+      <div class="sheet-body">
+        <div class="row" style="margin-bottom:8px">
+          <button id="btn-load" type="button" class="btn">データ読み込み</button>
+          <span class="micro">CSV / XLSX を選択</span>
+        </div>
+        <div class="micro" style="margin:-2px 0 12px;line-height:1.6">
+          商品マスタはページ表示時に <strong>products.json</strong> から自動読み込みします。
+          更新する場合は、ExcelからCSVを書き出し、同じ列（No. / 商品名 / 卸価格）で <strong>products.csv</strong> と <strong>products.json</strong> を差し替えてください。
+          自動読み込みに失敗した場合は、このボタンから従来どおりCSVまたはXLSXを読み込めます。
+        </div>
+        <div class="row"><strong class="micro">列マッピング（自動判定がうまくいかない時）</strong></div>
+        <div style="display:grid;gap:8px;margin:6px 0 0">
+          <div class="row">
+            <label for="map-code" class="muted" style="min-width:110px">品番列</label>
+            <select id="map-code"></select>
+          </div>
+          <div class="row">
+            <label for="map-name" class="muted" style="min-width:110px">商品名列</label>
+            <select id="map-name"></select>
+          </div>
+          <div class="row">
+            <label for="map-price" class="muted" style="min-width:110px">卸価格列</label>
+            <select id="map-price"></select>
+          </div>
+          <div class="row">
+            <button id="btn-apply-map" type="button" class="btn accent">この設定で確定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 印刷シート -->
+  <div id="sheet-print" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sheet-print-title">
+    <div class="sheet-panel">
+      <div class="sheet-header">
+        <div class="sheet-title" id="sheet-print-title">印刷の準備</div>
+        <button class="btn" id="close-print">閉じる</button>
+      </div>
+      <div class="sheet-body">
+        <div class="grid-two">
+          <div class="panel" style="margin:0">
+            <h2 class="section-title">お客様情報</h2>
+            <div class="row"><input id="cust-name" type="text" placeholder="お名前／会社名"/></div>
+            <div class="row">
+              <label for="cust-account-select" class="muted" style="min-width:90px">帳合先</label>
+              <select id="cust-account-select">
+                <option value="">選択してください</option>
+                <option value="名古屋眼鏡">名古屋眼鏡</option>
+                <option value="内田屋">内田屋</option>
+                <option value="三共社">三共社</option>
+  <option value="ヤブシタ">ヤブシタ</option>
+                
+                
+                <option value="エンパイヤ">エンパイヤ</option>
+                <option value="スドー">スドー</option>
+                <option value="オリエント">オリエント</option>
+                <option value="その他">その他</option>
+              </select>
+            </div>
+            <div class="row" id="cust-account-other-row" style="display:none">
+              <input id="cust-account-other" type="text" placeholder="帳合先（自由入力）"/>
+            </div>
+            <div class="row"><input id="cust-dept" type="text" placeholder="部署・役職（任意）"/></div>
+            <div class="row"><input id="cust-tel" type="text" placeholder="電話（任意）"/></div>
+            <div class="row"><input id="cust-addr" type="text" placeholder="住所（任意）"/></div>
+            <div class="row"><textarea id="cust-note" placeholder="備考（任意）"></textarea></div>
+          </div>
+          <div class="panel" style="margin:0; display:none">
+            <h2 class="section-title">会社情報（印字）</h2>
+            <div class="row"><input id="org-name" type="text" value="株式会社サンニシムラ" /></div>
+            <div class="row"><textarea id="org-info">本社　〒545-0013 大阪市阿倍野区長池町15番13号
+TEL：06-6621-8989　FAX：06-6624-0535
+東京営業所　〒110-0016 東京都台東区台東1丁目37番7号
+TEL：03-3832-0051　FAX：03-3834-0667</textarea></div>
+          </div>
+        </div>
+
+        <!-- 受注・会計 -->
+        <div class="panel narrow" style="margin:10px 0 0">
+          <h2 class="section-title">受注・会計</h2>
+          <div class="row">
+            <label for="order-person" class="muted" style="min-width:110px">受注者</label>
+            <select id="order-person">
+              <option value="">選択してください</option>
+              <option value="堂前">堂前</option>
+              <option value="小野村">小野村</option>
+              <option value="宮川">宮川</option>
+              <option value="増田">増田</option>
+              <option value="上阪（優）">上阪（優）</option>
+              <option value="上阪（政）">上阪（政）</option>
+              <option value="徳井">徳井</option>
+              <option value="尾形">尾形</option>
+              <option value="植村">植村</option>
+              <option value="西村">西村</option>
+            </select>
+          </div>
+          <div class="row" style="gap:16px;align-items:center">
+            <label class="muted"><input type="checkbox" id="same-day-pay" /> 当日会計</label>
+            <label class="muted"><input type="checkbox" id="unpaid-pay" /> 後日会計（受取時会計）</label>
+          </div>
+          <!-- 当日会計 -->
+          <div id="same-day-fields" style="display:none; margin-left:12px">
+            <div class="row">
+              <label for="pay-method" class="muted" style="min-width:110px">決済方法</label>
+              <select id="pay-method">
+                <option value="">選択してください</option>
+                <option value="クレジット決済">クレジット決済</option>
+                <option value="現金決済">現金決済</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="delivery-method" class="muted" style="min-width:110px">お渡し方法</label>
+              <select id="delivery-method">
+                <option value="">選択してください</option>
+                <option value="翌日受け取り">翌日受け取り</option>
+                <option value="翌々日受け取り">翌々日受け取り</option>
+              
+              <option value="お渡し済み">お渡し済み</option>
+              <option value="ホテル送り">ホテル送り</option>
+            </select>
+            </div>
+            <div class="row">
+              <small id="delivery-note" class="micro" style="display:none;color:#d32f2f"></small>
+            </div>
+          </div>
+          <!-- 後日会計（受取時会計） -->
+          <div id="unpaid-fields" style="display:none; margin-left:12px">
+            <div class="row">
+              <label for="unpaid-type" class="muted" style="min-width:110px">区分</label>
+              <select id="unpaid-type">
+                <option value="">選択してください</option>
+                <option value="受取時会計">受取時会計</option>
+                <option value="その他">その他</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="unpaid-delivery-method" class="muted" style="min-width:110px">お渡し方法</label>
+              <select id="unpaid-delivery-method">
+                <option value="">選択してください</option>
+                <option value="翌日受け取り">翌日受け取り</option>
+                <option value="翌々日受け取り">翌々日受け取り</option>
+              </select>
+            </div>
+            <div class="row">
+              <small id="unpaid-delivery-note" class="micro" style="display:none;color:#d32f2f"></small>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="justify-content:flex-end;margin-top:10px">
+          <button id="btn-print" type="button" class="btn primary">PDF作成 &amp; 印刷（AirPrint）</button>
+  <button id="btn-go-print-intl" type="button" class="btn" style="margin-left:8px">外国人向け（英語）印刷</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OCR取り込みシート -->
+  <div id="sheet-ocr" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sheet-ocr-title">
+    <div class="sheet-panel">
+      <div class="sheet-header">
+        <div class="sheet-title" id="sheet-ocr-title">写真から読み取り（OCR β）</div>
+        <button class="btn" id="close-ocr">閉じる</button>
+      </div>
+      <div class="sheet-body">
+        <div class="row" style="gap:12px;flex-wrap:wrap">
+          <button id="btn-ocr-pick" type="button" class="btn">写真を選ぶ / 撮影</button>
+          <span class="micro">※手書きは精度に限界あり。印字テキストが有利です。</span>
+        </div>
+        <div id="ocr-status" class="micro" style="margin-top:6px;color:#6b7280"></div>
+        <div id="ocr-preview" style="margin-top:10px"></div>
+        <div class="row" style="justify-content:flex-end;margin-top:10px">
+          <button id="btn-ocr-apply" type="button" class="btn accent">候補を明細に追加</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  
+  <!-- 注文履歴シート -->
+  <div id="sheet-history" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sheet-history-title">
+    <div class="sheet-panel">
+      <div class="sheet-header">
+        <div class="sheet-title" id="sheet-history-title">過去の注文履歴</div>
+        <button class="btn" id="close-history">閉じる</button>
+      </div>
+      <div class="sheet-body">
+        <div class="row" style="gap:8px;margin-bottom:8px">
+          <button id="btn-history-save" type="button" class="btn accent">いまの明細を履歴に保存</button>
+          <button id="btn-history-clear" type="button" class="btn danger">履歴を全削除</button>
+        </div>
+        <div class="micro" style="margin-bottom:6px;color:#6b7280">※ 印刷（PDF作成）時にも自動保存されます。</div>
+        <div id="history-list" style="display:grid; gap:8px"></div>
+        <div id="history-empty" class="micro" style="color:#6b7280; display:none">履歴がありません。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 隠しファイル入力 -->
+  <input id="file" type="file" class="hidden" accept=".xlsx,.csv" />
+  <input id="file-ocr" type="file" class="hidden" accept="image/*" capture="environment" />
+
+<script>
+  // ---- 状態 ----
+  const state = {
+    rawRows: [], rows: [], headers: [],
+    maps: { code:null, name:null, price:null },
+    order: [],
+  };
+  const PRODUCT_DATA_URL = './products.json';
+
+  // ---- 要素 ----
+  const $ = (id)=>document.getElementById(id);
+  const fileInput = $('file');
+  const btnLoad = $('btn-load');
+  const datasetName = $('dataset-name');
+  const total = $('grand-total');
+  const q = $('q');
+  const btnClear = $('btn-clear');
+  const results = $('results');
+  const orderWrap = $('order');
+  const btnReset = $('btn-reset-order');
+  const btnAddShipping = $('btn-add-shipping');
+
+  const mapCode = $('map-code');
+  const mapName = $('map-name');
+  const mapPrice = $('map-price');
+  const btnApplyMap = $('btn-apply-map');
+
+  // シート関連
+  const sheetSettings = $('sheet-settings');
+  const sheetPrint = $('sheet-print');
+  const sheetOCR = $('sheet-ocr');
+  const openSettings = $('btn-settings');
+  const closeSettings = $('close-settings');
+  const openPrint = $('btn-go-print');
+  const closePrint = $('close-print');
+  const openOCR = $('btn-ocr');
+  const closeOCR = $('close-ocr');
+
+  // お客様・会社情報
+  const custName = ()=>$('cust-name');
+  const custAccountSelect = ()=>$('cust-account-select');
+  const custAccountOtherRow = ()=>$('cust-account-other-row');
+  const custAccountOther = ()=>$('cust-account-other');
+  const custDept = ()=>$('cust-dept');
+  const custTel  = ()=>$('cust-tel');
+  const custAddr = ()=>$('cust-addr');
+  const custNote = ()=>$('cust-note');
+  const orgName  = ()=>$('org-name');
+  const orgInfo  = ()=>$('org-info');
+
+  // 当日会計
+  const orderPerson = ()=>$('order-person');
+  const sameDayPay = ()=>$('same-day-pay');
+  const sameDayFields = ()=>$('same-day-fields');
+  const payMethod = ()=>$('pay-method');
+  const deliveryMethod = ()=>$('delivery-method');
+  const deliveryNote = ()=>$('delivery-note');
+
+  // 後日会計（受取時会計）
+  const unpaidPay = ()=>$('unpaid-pay');
+  const unpaidFields = ()=>$('unpaid-fields');
+  const unpaidType = ()=>$('unpaid-type');
+  const unpaidDeliveryMethod = ()=>$('unpaid-delivery-method');
+  const unpaidDeliveryNote = ()=>$('unpaid-delivery-note');
+
+  const printArea = $('print-area');
+
+  // 帳合先 値取得
+  function getCustAccountValue(){
+    const sel = custAccountSelect?.();
+    if(!sel) return '';
+    const val = sel.value || '';
+    if(val === 'その他'){
+      const other = custAccountOther?.();
+      const v = (other && other.value) ? other.value.trim() : '';
+      return v || 'その他';
+    }
+    return val;
+  }
+
+  // ---- 小道具 ----
+  const yen = (n)=> '¥' + (Math.round(n||0)).toLocaleString('ja-JP');
+  const parseNumber = (v)=>{
+    if (typeof v === 'number') return v;
+    if (!v) return 0;
+    const s = String(v).replace(/[\,\s￥¥]/g,'');
+    const n = Number(s);
+    return isNaN(n) ? 0 : n;
+  };
+  const escapeHtml = (str)=> String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
+  const productCount = (count)=> Number(count || 0).toLocaleString('ja-JP');
+
+  function setProductLoadStatus(kind, count){
+    if(!datasetName) return;
+    if(kind === 'auto'){
+      datasetName.textContent = `自動読込済み：商品データ ${productCount(count)}件`;
+      return;
+    }
+    if(kind === 'manual'){
+      datasetName.textContent = `手動読込済み：商品データ ${productCount(count)}件`;
+      return;
+    }
+    if(kind === 'loading'){
+      datasetName.textContent = '商品データを自動読み込み中…';
+      return;
+    }
+    datasetName.textContent = '自動読込に失敗しました。設定からExcelまたはCSVを読み込んでください。';
+  }
+
+  function normalizeProduct(raw){
+    return {
+      code: String(raw.code ?? raw['No.'] ?? raw.no ?? raw['品番'] ?? raw['商品コード'] ?? '').trim(),
+      name: String(raw.name ?? raw['商品名'] ?? raw['品名'] ?? raw['名称'] ?? '').trim(),
+      price: parseNumber(raw.price ?? raw['卸価格'] ?? raw['価格'] ?? raw['単価'] ?? 0),
+    };
+  }
+
+  function setProductRows(products, source){
+    state.rows = products.map(normalizeProduct).filter(r => r.code || r.name);
+    state.headers = ['No.','商品名','卸価格'];
+    state.rawRows = state.rows.map(r => [r.code, r.name, r.price]);
+    state.maps = { code:0, name:1, price:2 };
+    fillMapperSelectors();
+    search(q.value);
+    setProductLoadStatus(source, state.rows.length);
+  }
+
+  async function loadBundledProducts(){
+    try{
+      setProductLoadStatus('loading');
+      const res = await fetch(PRODUCT_DATA_URL, { cache:'no-store' });
+      if(!res.ok) throw new Error(`商品データの取得に失敗しました: ${res.status}`);
+      const products = await res.json();
+      if(!Array.isArray(products)) throw new Error('商品データの形式が配列ではありません。');
+      setProductRows(products, 'auto');
+    }catch(err){
+      console.error(err);
+      setProductLoadStatus('error');
+    }
+  }
+
+  // 共通：お渡し表示（対象セレクトに依存）
+  function formatDateYMD(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}/${m}/${day}`;
+  }
+  function getDeliveryDisplayFromSelect(selEl){
+    const v = (selEl && selEl.value) ? selEl.value : '';
+    const now = new Date();
+    let isSpecial = false;
+    let text = v;
+
+    if(v === '翌日受け取り'){
+      const d = new Date(now);
+      d.setDate(d.getDate() + 1);
+      text = `${formatDateYMD(d)} 午後受け取り`;
+      isSpecial = true;
+    }else if(v === '翌々日受け取り'){
+      const d = new Date(now);
+      d.setDate(d.getDate() + 2);
+      text = `${formatDateYMD(d)} 受け取り`;
+      isSpecial = true;
+    }
+    return { text, isSpecial };
+  }
+  // English display for delivery date
+  function getDeliveryDisplayEN(selEl){
+    const v = (selEl && selEl.value) ? selEl.value : '';
+    const now = new Date();
+    if(v === '翌日受け取り'){
+      const d = new Date(now); d.setDate(d.getDate() + 1);
+      return { text: `${formatDateYMD(d)} pick-up (afternoon)`, isSpecial: true };
+    }else if(v === '翌々日受け取り'){
+      const d = new Date(now); d.setDate(d.getDate() + 2);
+      return { text: `${formatDateYMD(d)} pick-up`, isSpecial: true };
+    }
+    return { text: v, isSpecial: false };
+  }
+
+  function updateDeliveryNotes(){
+    // 当日会計側
+    const n1 = deliveryNote?.();
+    if(n1){
+      const { text, isSpecial } = getDeliveryDisplayFromSelect(deliveryMethod?.());
+      if(isSpecial){ n1.textContent = `印字：${text}`; n1.style.display=''; }
+      else { n1.textContent=''; n1.style.display='none'; }
+    }
+    // 後日会計側
+    const n2 = unpaidDeliveryNote?.();
+    if(n2){
+      const { text, isSpecial } = getDeliveryDisplayFromSelect(unpaidDeliveryMethod?.());
+      if(isSpecial){ n2.textContent = `印字：${text}`; n2.style.display=''; }
+      else { n2.textContent=''; n2.style.display='none'; }
+    }
+  }
+
+  function autoMap(headers){
+    const lc = headers.map(h => String(h ?? '').trim().toLowerCase());
+    const find = (cands)=>{
+      for(const c of cands){
+        const t = c.toLowerCase();
+        const i = lc.findIndex(h => h === t || h.includes(t));
+        if(i>=0) return i;
+      }
+      return -1;
+    };
+    return {
+      code:  find(['品番','型番','sku','品目コード','商品コード','jan','コード']),
+      name:  find(['商品名','品名','名称','品目名','品名（日本語）']),
+      price: find(['卸価格','単価','価格','売価','卸売価格','卸値','price','cost','wholesale']),
+    };
+  }
+
+  function fillMapperSelectors(){
+    const opts = state.headers.map((h,i)=>`<option value="${i}">${h ?? ('列'+(i+1))}</option>`).join('');
+    mapCode.innerHTML = opts; mapName.innerHTML = opts; mapPrice.innerHTML = opts;
+    const m = autoMap(state.headers);
+    mapCode.value = Math.max(0,m.code); mapName.value = Math.max(0,m.name); mapPrice.value = Math.max(0,m.price);
+    state.maps = { code:m.code, name:m.name, price:m.price };
+  }
+
+  function applyMapsToRows(){
+    state.rows = [];
+    const {code,name,price} = state.maps;
+    for(const r of state.rawRows){
+      const arr = Array.isArray(r) ? r : Object.values(r);
+      const c = String(arr[code] ?? '').trim();
+      const n = String(arr[name] ?? '').trim();
+      const p = parseNumber(arr[price]);
+      if(c !== '' && p >= 0) state.rows.push({code:c, name:n, price:p});
+    }
+  }
+
+  function updateGrandTotal(){
+    const sum = state.order.reduce((a,b)=>a + b.price*b.qty, 0);
+        total.textContent = yen(sum);
+  }
+
+  function renderResults(list){
+    results.innerHTML = '';
+    for(const r of list){
+      const inOrder = state.order.find(li=>li.code===r.code);
+      const qtyBadge = inOrder ? `<span class="qty-badge">×${inOrder.qty}</span>` : '';
+      const card = document.createElement('div');
+      card.className = 'card' + (r.__exact ? ' exact' : '');
+      card.innerHTML = `
+        ${qtyBadge}
+        <div class="title-stack">
+          <div class="code" title="${escapeHtml(r.code)}">${escapeHtml(r.code)}${r.__exact ? '<span class="badge-exact">一致</span>' : ''}</div>
+          <div class="name" title="${escapeHtml(r.name || '')}">${escapeHtml(r.name || '')}</div>
+        </div>
+        <div class="price">${yen(r.price)}</div>
+      `;
+      card.addEventListener('click', ()=> addToOrder(r, 1), {passive:false});
+      results.appendChild(card);
+    }
+  }
+
+  function renderOrder(){
+    orderWrap.innerHTML = '';
+    for(let i=0;i<state.order.length;i++){
+      const li = state.order[i];
+      const row = document.createElement('div');
+      row.className = 'line';
+      row.innerHTML = `
+        <div class="title-two" title="${escapeHtml(li.code)}｜${escapeHtml(li.name || '')}">
+          <div class="code">${escapeHtml(li.code)}</div>
+          <div class="name">${escapeHtml(li.name || '')}</div>
+        </div>
+        <div class="ops">
+          <div class="price">${yen(li.price)}</div>
+          <label class="muted" style="font-size:12px">数量：</label>
+          <input data-i="${i}" type="number" min="1" step="1" value="${li.qty}" class="qty-mini" inputmode="numeric" pattern="[0-9]*" aria-label="数量"/>
+          <button data-i="${i}" type="button" class="btn danger">削除</button>
+        </div>
+      `;
+      row.querySelector('input').addEventListener('change', (e)=>{
+        const idx = Number(e.target.getAttribute('data-i'));
+        const v = Math.max(1, parseInt(e.target.value||'1',10));
+        state.order[idx].qty = v; updateGrandTotal();
+      }, {passive:false});
+      row.querySelector('button').addEventListener('click',(e)=>{
+        const idx = Number(e.target.getAttribute('data-i'));
+        state.order.splice(idx,1); renderOrder(); updateGrandTotal();
+      }, {passive:false});
+      orderWrap.appendChild(row);
+    }
+  }
+
+  function addToOrder(r, qty){
+    const ex = state.order.find(li=>li.code===r.code);
+    if(ex) ex.qty += qty;
+    else state.order.unshift({code:r.code,name:r.name,price:r.price,qty});
+    renderOrder(); updateGrandTotal();
+    requestAnimationFrame(()=>/* no-scroll patch */ void 0 && window.scrollTo({top:0,behavior:'smooth'}));
+    // keep query & results; refresh badges by re-running current search
+    search(q.value);
+  }
+
+  function search(text){
+    const s = String(text||'').trim();
+    if(!s){ results.innerHTML = ''; return; }
+    const qq = s.toLowerCase();
+    const exact = [], part = [];
+    for(const r of state.rows){
+      if (r.code.toLowerCase() === qq) exact.push({...r, __exact:true});
+      else if (r.code.toLowerCase().includes(qq) || (r.name && r.name.toLowerCase().includes(qq))) part.push({...r, __exact:false});
+    }
+    renderResults([...exact, ...part].slice(0,150));
+  }
+
+  // ---- ソフトキーボード制御 ----
+  let softKbOn = false;
+  let caretPos = 0;
+
+  function enableSoftKb(){
+    softKbOn = true;
+    q.readOnly = false;
+    q.setAttribute('inputmode','text');
+    q.focus();
+    try{ q.setSelectionRange(caretPos, caretPos); }catch(_){}
+  }
+  function disableSoftKb(){
+    softKbOn = false;
+    q.readOnly = true;
+    q.setAttribute('inputmode','none');
+    q.blur();
+  }
+  disableSoftKb();
+  q?.addEventListener('mousedown', ()=>{ enableSoftKb(); }, {passive:true});
+  q?.addEventListener('touchstart', ()=>{ enableSoftKb(); }, {passive:true});
+  ['keyup','click','input','select'].forEach(ev=>{
+    q?.addEventListener(ev, ()=>{
+      if(!softKbOn) return;
+      try{ caretPos = q.selectionStart ?? q.value.length; }
+      catch(_){ caretPos = q.value.length; }
+    }, {passive:true});
+  });
+
+  // ---- ミニ数字キーパッド ----
+  (function(){
+    const kb = document.getElementById('mini-kb-inline');
+    if(!kb) return;
+    function insertAtCursor(el, text){
+      if(softKbOn){ disableSoftKb(); }
+      const start = (Number.isInteger(caretPos) ? caretPos : (el.selectionStart ?? el.value.length));
+      const end = el.selectionEnd ?? el.value.length;
+      const before = el.value.slice(0,start);
+      const after = el.value.slice(end);
+      el.value = before + text + after;
+      const pos = start + text.length;
+      try{ el.setSelectionRange(pos,pos); }catch(_){}
+      el.dispatchEvent(new Event('input', {bubbles:true}));
+      el.focus();
+    }
+    function backspaceAtCursor(el){
+      const s = (Number.isInteger(caretPos) ? caretPos : (el.selectionStart ?? el.value.length));
+      const e = softKbOn ? (el.selectionEnd ?? s) : s;
+      const start = s; const end = e;
+      if(start !== end){
+        const before = el.value.slice(0,start);
+        const after = el.value.slice(end);
+        el.value = before + after;
+        try{ el.setSelectionRange(start,start); }catch(_){}
+      }else if(start > 0){
+        const before = el.value.slice(0,start-1);
+        const after = el.value.slice(end);
+        el.value = before + after;
+        const pos = start - 1;
+        try{ el.setSelectionRange(pos,pos); }catch(_){}
+      }
+      el.dispatchEvent(new Event('input', {bubbles:true}));
+      el.focus();
+    }
+    kb.addEventListener('mousedown', (e)=>{ e.preventDefault(); q?.focus(); }, {passive:false});
+    kb.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button.k');
+      if(!btn) return;
+      const key = btn.getAttribute('data-key');
+      const act = btn.getAttribute('data-action');
+      if(key){ insertAtCursor(q, key); return; }
+      if(act === 'backspace'){ backspaceAtCursor(q); return; }
+    }, {passive:false});
+  })();
+
+  // ---- 入力の正規化 ----
+  function normalizeSeparators(e){
+    const el = q;
+    const before = el.value;
+    const pos = el.selectionStart || before.length;
+    let after = before
+      .replace(/[\u2010-\u2015\u2212\u30FC\uFF0D]/g, '-')
+      .replace(/[\.・/／\s]/g, '-')
+      .replace(/-{2,}/g, '-');
+    if(after !== before){
+      el.value = after;
+      try{ el.setSelectionRange(Math.min(pos, after.length), Math.min(pos, after.length)); }catch(_){ }
+      el.dispatchEvent(new Event('input', {bubbles:true}));
+    }
+  }
+  q?.addEventListener('input', (e)=>{ normalizeSeparators(e); try{ caretPos = q.selectionStart ?? q.value.length; }catch(_){ caretPos = q.value.length; } }, {passive:true});
+
+  // ---- クイックバー ----
+  const quickbar = document.getElementById('quickbar');
+  function insertAtCursor(el, text){
+    if(softKbOn){ disableSoftKb(); }
+    const start = (Number.isInteger(caretPos) ? caretPos : (el.selectionStart ?? el.value.length));
+    const end = el.selectionEnd ?? el.value.length;
+    const before = el.value.slice(0,start);
+    const after = el.value.slice(end);
+    el.value = before + text + after;
+    const pos = start + text.length;
+    try{ el.setSelectionRange(pos,pos); }catch(_){}
+    el.dispatchEvent(new Event('input', {bubbles:true}));
+    el.focus();
+  }
+  quickbar?.addEventListener('click', (e)=>{
+    const b = e.target.closest('button.qb');
+    if(!b) return;
+    const t = b.getAttribute('data-insert') || '';
+    insertAtCursor(q, t);
+  }, {passive:false});
+
+  // ---- ファイル読込 ----
+  btnLoad?.addEventListener('click', ()=>{ fileInput.value=''; fileInput.click(); }, {passive:false});
+  fileInput?.addEventListener('change', async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    datasetName.textContent = `読み込み中：${file.name}`;
+    const ext = (file.name.split('.').pop()||'').toLowerCase();
+    try{
+      const buf = await file.arrayBuffer();
+      if(ext === 'csv'){
+        const text = new TextDecoder('utf-8').decode(buf);
+        const parsed = Papa.parse(text,{header:false,skipEmptyLines:true});
+        const rows = parsed.data;
+        state.headers = rows[0] || [];
+        state.rawRows = rows.slice(1);
+      }else{
+        const wb = XLSX.read(buf,{type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
+        state.headers = rows[0] || [];
+        state.rawRows = rows.slice(1);
+      }
+      fillMapperSelectors();
+      applyMapsToRows();
+      search(q.value);
+      setProductLoadStatus('manual', state.rows.length);
+    }catch(err){
+      console.error(err);
+      alert('読み込みに失敗しました。CSVまたはXLSXの形式をご確認ください。');
+    }
+  }, {passive:false});
+
+  // ---- マッピング反映 ----
+  btnApplyMap?.addEventListener('click', ()=>{
+    state.maps = {
+      code:Number(mapCode.value),
+      name:Number(mapName.value),
+      price:Number(mapPrice.value),
+    };
+    applyMapsToRows();
+    hide(sheetSettings);
+    search(q.value);
+  }, {passive:false});
+
+  // ---- 検索UI ----
+  q?.addEventListener('input', (e)=>{ search(e.target.value); }, {passive:true});
+  btnClear?.addEventListener('click', ()=>{ q.value=''; results.innerHTML=''; q.blur(); }, {passive:false});
+
+  // ---- 注文明細 ----
+  btnReset?.addEventListener('click', ()=>{
+    if(!state.order.length) return;
+    if(confirm('注文明細を全て削除します。よろしいですか？')){
+      state.order = []; renderOrder(); updateGrandTotal();
+    }
+  }, {passive:false});
+
+  // ---- シートの開閉 ----
+  function show(el){ el.classList.remove('hidden'); document.body.style.overflow='hidden'; }
+  function hide(el){ el.classList.add('hidden'); document.body.style.overflow=''; }
+
+  openSettings?.addEventListener('click', ()=> show(sheetSettings), {passive:false});
+  closeSettings?.addEventListener('click', ()=> hide(sheetSettings), {passive:false});
+  openPrint?.addEventListener('click', ()=> show(sheetPrint), {passive:false});
+  closePrint?.addEventListener('click', ()=> hide(sheetPrint), {passive:false});
+  openOCR?.addEventListener('click', ()=>{
+    show(sheetOCR);
+    $('ocr-status').textContent = '写真を選択してください。';
+    $('ocr-preview').innerHTML = '';
+    ocrCandidates = [];
+  }, {passive:false});
+  closeOCR?.addEventListener('click', ()=> hide(sheetOCR), {passive:false});
+
+  // ---- 当日会計 / 後日会計（相互排他） ----
+  sameDayPay()?.addEventListener('change', (e)=>{
+    sameDayFields().style.display = e.target.checked ? '' : 'none';
+    if(e.target.checked){
+      if(unpaidPay?.()){ unpaidPay().checked = false; }
+      if(unpaidFields?.()){ unpaidFields().style.display = 'none'; }
+    }
+  }, {passive:false});
+
+  unpaidPay()?.addEventListener('change', (e)=>{
+    unpaidFields().style.display = e.target.checked ? '' : 'none';
+    if(e.target.checked){
+      if(sameDayPay?.()){ sameDayPay().checked = false; }
+      if(sameDayFields?.()){ sameDayFields().style.display = 'none'; }
+    }
+  }, {passive:false});
+
+  // 帳合先
+  custAccountSelect()?.addEventListener('change', (e)=>{
+    const show = e.target.value === 'その他';
+    const row = custAccountOtherRow?.();
+    if(row) row.style.display = show ? '' : 'none';
+    if(!show){ const o = custAccountOther?.(); if(o) o.value = ''; }
+  }, {passive:false});
+
+  // お渡し方法 注記更新
+  deliveryMethod()?.addEventListener('change', updateDeliveryNotes, {passive:false});
+  unpaidDeliveryMethod()?.addEventListener('change', updateDeliveryNotes, {passive:false});
+
+  // ---- 印刷 ----
+  function buildTableRows() {
+    let rows = '';
+    for(const li of state.order){
+      const amount = li.price * li.qty;
+      rows += `<tr>
+        <td>${escapeHtml(li.code)}</td>
+        <td>${escapeHtml(li.name || '')}</td>
+        <td style="text-align:right">${li.qty}</td>
+        <td style="text-align:right">${yen(li.price)}</td>
+        <td style="text-align:right">${yen(amount)}</td>
+      </tr>`;
+    }
+    return rows;
+  }
+
+  
+  function buildPage(title){
+    const now = new Date();
+    const dateStr = now.toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const sum = state.order.reduce((a,b)=>a + b.price*b.qty, 0);
+    const taxRate = 0.10;
+    const sumWithTax = Math.round(sum * (1 + taxRate));
+
+    const table = `
+      <table class="print-table">
+        <thead>
+          <tr><th style="width:28%">品番</th><th>商品名</th><th style="width:10%">数量</th><th style="width:14%">単価</th><th style="width:16%">金額</th></tr>
+        </thead>
+        <tbody>
+          ${buildTableRows() || `<tr><td colspan="5">（明細は未選択）</td></tr>`}
+        </tbody>
+      </table>`;
+
+    const orderPersonStr = escapeHtml(orderPerson()?.value || '');
+
+    // 当日会計側
+    const sameDay = sameDayPay()?.checked;
+    const payStr = escapeHtml(payMethod()?.value || '');
+    const { text: delivText1, isSpecial: isSpecial1 } = getDeliveryDisplayFromSelect(deliveryMethod?.());
+    const delivHTML1 = isSpecial1 ? `<span style="color:#d32f2f">${escapeHtml(delivText1)}</span>` : escapeHtml(delivText1);
+
+    // 後日会計側
+    const unpaid = unpaidPay()?.checked;
+    const unpaidStr = escapeHtml(unpaidType()?.value || '');
+    const { text: delivText2, isSpecial: isSpecial2 } = getDeliveryDisplayFromSelect(unpaidDeliveryMethod?.());
+    const delivHTML2 = isSpecial2 ? `<span style="color:#d32f2f">${escapeHtml(delivText2)}</span>` : escapeHtml(delivText2);
+
+    // 右上ブロック（会社情報＋受注者＋会計表示）
+    let rightBlock = `<div style="font-weight:900">株式会社サンニシムラ</div>
+            <div class="org-block">
+              <div><strong>本社</strong>　〒545-0013<br/>大阪市阿倍野区長池町15番13号<br/><span class="nowrap">TEL：06-6621-8989　FAX：06-6624-0535</span></div>
+              <div style="margin-top:2mm"><strong>東京営業所</strong>　〒110-0016<br/>東京都台東区台東1丁目37番7号<br/><span class="nowrap">TEL：03-3832-0051　FAX：03-3834-0667</span></div>
+            </div>
+            <div style="margin-top:4mm"><strong>受注者：</strong>${orderPersonStr}</div>`;
+
+    if(sameDay){
+      rightBlock += `<div style="margin-top:2mm"><strong>会計：</strong>${payStr} ／ <strong>お渡し：</strong>${delivHTML1}</div>`;
+    }else if(unpaid){
+      rightBlock += `<div style="margin-top:2mm"><strong><span style="color:#d32f2f">後日会計：</span></strong>${unpaidStr}${delivText2 ? ` ／ <strong>お渡し：</strong>${delivHTML2}` : ''}</div>`;
+      // 会社控えにのみ、決済方法チェック欄と注意文を追加
+      if (String(title).includes('会社')) {
+        rightBlock += `<div style="margin-top:2mm"><strong>決済方法：</strong>□ クレジット決済　□ 現金決済<br/><span style="color:#d32f2f">※決済方法をチェック</span></div>`;
+      }
+    }
+
+    return `
+      <div class="print-page">
+        <div class="print-head">
+          <div>
+            <div class="print-title">${title}</div>
+            <div class="print-info">発行日：${dateStr}</div>
+            <div class="print-info">お客様：${escapeHtml(custName()?.value || '')}　${escapeHtml(custDept()?.value || '')}</div>
+            <div class="print-info">帳合先：${escapeHtml(getCustAccountValue() || '')}</div>
+            <div class="print-info">住所：${escapeHtml(custAddr()?.value || '')}</div>
+            <div class="print-info">TEL：${escapeHtml(custTel()?.value || '')}</div>
+          </div>
+          <div style="text-align:right;max-width:60%">${rightBlock}</div>
+        </div>
+        ${table}
+        <div class="print-sum">合計金額（税抜）：${yen(sum)}</div>
+        <div class="print-sum">合計金額（税込）：${yen(sumWithTax)}</div>
+        ${custNote()?.value ? `<div style="margin-top:6mm"><strong>備考：</strong><div style="white-space:pre-wrap">${escapeHtml(custNote().value)}</div></div>` : ''}
+      </div>`;
+  }
+
+  function buildPageEN(title){
+    const now = new Date();
+    const dateStr = now.toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const sum = state.order.reduce((a,b)=>a + b.price*b.qty, 0);
+    const taxRate = 0.10;
+    const sumWithTax = Math.round(sum * (1 + taxRate));
+
+    const table = `
+      <table class="print-table">
+        <thead>
+          <tr><th style="width:28%">Code</th><th>Product</th><th style="width:10%">Qty</th><th style="width:14%">Unit Price</th><th style="width:16%">Amount</th></tr>
+        </thead>
+        <tbody>
+          ${buildTableRows() || `<tr><td colspan="5">(No items)</td></tr>`}
+        </tbody>
+      </table>`;
+
+    const orderPersonStr = escapeHtml(orderPerson()?.value || '');
+
+    // Same-day payment
+    const sameDay = sameDayPay()?.checked;
+    const payStr = escapeHtml(payMethod()?.value || '');
+    const { text: delivText1E, isSpecial: isSpecial1 } = getDeliveryDisplayEN(deliveryMethod?.());
+    const delivHTML1 = isSpecial1 ? `<span style="color:#d32f2f">${escapeHtml(delivText1E)}</span>` : escapeHtml(delivText1E);
+
+    // Unpaid (payment upon pickup)
+    const unpaid = unpaidPay()?.checked;
+    const unpaidStr = escapeHtml(unpaidType()?.value || '');
+    const { text: delivText2E, isSpecial: isSpecial2 } = getDeliveryDisplayEN(unpaidDeliveryMethod?.());
+    const delivHTML2 = isSpecial2 ? `<span style="color:#d32f2f">${escapeHtml(delivText2E)}</span>` : escapeHtml(delivText2E);
+
+    let rightBlock = `<div style="font-weight:900">SAN NISHIMURA Co., Ltd.</div>
+            <div class="org-block">
+              <div><strong>Osaka HQ</strong><br/>15-13 Nagaike-cho, Abeno-ku, Osaka 545-0013<br/><span class="nowrap">TEL: 06-6621-8989 / FAX: 06-6624-0535</span></div>
+              <div style="margin-top:2mm"><strong>Tokyo Office</strong><br/>1-37-7 Taito, Taito-ku, Tokyo 110-0016<br/><span class="nowrap">TEL: 03-3832-0051 / FAX: 03-3834-0667</span></div>
+            </div>
+            <div style="margin-top:4mm"><strong>Order Taker:</strong> ${orderPersonStr}</div>`;
+
+    if(sameDay){
+      rightBlock += `<div style="margin-top:2mm"><strong>Payment:</strong> ${payStr} ／ <strong>Delivery:</strong> ${delivHTML1}</div>`;
+    }else if(unpaid){
+      rightBlock += `<div style="margin-top:2mm"><strong><span style="color:#d32f2f">Payment upon pickup:</span></strong> ${unpaidStr}${delivText2E ? ` ／ <strong>Delivery:</strong> ${delivHTML2}` : ''}</div>`;
+    }
+
+    return `
+      <div class="print-page">
+        <div class="print-head">
+          <div>
+            <div class="print-title">${title}</div>
+            <div class="print-info">Issued on: ${dateStr}</div>
+            <div class="print-info">Customer: ${escapeHtml(custName()?.value || '')}　${escapeHtml(custDept()?.value || '')}</div>
+            <div class="print-info">Account: ${escapeHtml(getCustAccountValue() || '')}</div>
+            <div class="print-info">Address: ${escapeHtml(custAddr()?.value || '')}</div>
+            <div class="print-info">TEL: ${escapeHtml(custTel()?.value || '')}</div>
+          </div>
+          <div style="text-align:right;max-width:60%">${rightBlock}</div>
+        </div>
+        ${table}
+        <div class="print-sum">Subtotal (excl. tax): ${yen(sum)}</div>
+        <div class="print-sum">Total (incl. tax): ${yen(sumWithTax)}</div>
+        ${custNote()?.value ? `<div style="margin-top:6mm"><strong>Note:</strong><div style="white-space:pre-wrap">${escapeHtml(custNote().value)}</div></div>` : ''}
+      </div>`;
+  }
+
+  
+  function buildPrintDocument(){
+    document.getElementById('print-area').innerHTML = buildPage('お客様控え') + buildPage('会社控え');
+  }
+
+  function buildPrintDocumentIntl(){
+    document.getElementById('print-area').innerHTML = buildPageEN('Customer Copy') + buildPage('会社控え');
+  }
+function openPrintWindow(html){
+    const w = window.open('', '_blank');
+    if(!w) return false;
+    const doc = `<!DOCTYPE html>
+<html lang="ja">
+<head><meta name="format-detection" content="telephone=no">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>印刷</title>
+<style>
+  body{margin:0;padding:0;font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Apple Color Emoji", "Segoe UI Emoji";}
+  .print-page{page-break-after:always;padding:18mm 14mm;font-size:12px}
+  .print-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8mm}
+  .print-title{font-size:18px;font-weight:900;letter-spacing:.08em}
+  .print-info{font-size:12px;color:#111}
+  .print-table{width:100%;border-collapse:collapse;margin-top:6mm}
+  .print-table th, .print-table td{border:1px solid #333;padding:6px 8px;vertical-align:top}
+  .print-table th{background:#f2f2f2}
+  .print-sum{display:flex;justify-content:flex-end;margin-top:6mm;font-size:14px;font-weight:900}
+  .nowrap{white-space:nowrap}
+  .org-block{font-size:12px;line-height:1.5}
+  @media print {.noprint{display:none}}
+/* tel/fax autolink hardening */
+a[href^="tel"], a[href^="tel"]:visited,
+a[href^="fax"], a[href^="fax"]:visited {
+  color: #111 !important;
+  text-decoration: none !important;
+}
+</style>
+</head>
+<body>` + html + `</body></html>`;
+    w.document.open(); w.document.write(doc); w.document.close();
+    setTimeout(()=>{ try{ w.focus(); w.print(); }catch(_){ /* ignore */ } }, 300);
+    return true;
+  }
+
+  document.addEventListener('click', (e)=>{
+    if(e.target && e.target.id === 'btn-print'){
+      if(state.order.length === 0){
+        if(!confirm('明細が空ですが、印刷／PDFを続行しますか？')) return;
+      }
+      // 印字前に注記を最新化（選択直後でも反映）
+      updateDeliveryNotes();
+      buildPrintDocument();
+      const ok = openPrintWindow(document.getElementById('print-area').innerHTML);
+      if(ok) return;
+      requestAnimationFrame(()=>{
+        setTimeout(()=>{
+          try{ window.print(); }
+          catch(err){ alert('印刷ダイアログを開けませんでした。Safariで開いてからお試しください。'); }
+        }, 150);
+      });
+    }
+  }, {passive:false});
+  document.addEventListener('click', (e)=>{
+    if(e.target && e.target.id === 'btn-go-print-intl'){
+      if(state.order.length === 0){
+        if(!confirm('明細が空ですが、印刷／PDFを続行しますか？')) return;
+      }
+      updateDeliveryNotes();
+      buildPrintDocumentIntl();
+      const ok = openPrintWindow(document.getElementById('print-area').innerHTML);
+      if(ok) return;
+      requestAnimationFrame(()=>{
+        setTimeout(()=>{
+          try{ window.print(); }
+          catch(err){ alert('印刷ダイアログを開けませんでした。Safariで開いてからお試しください。'); }
+        }, 150);
+      });
+    }
+  }, {passive:false});
+
+
+
+  document.addEventListener('click', (e)=>{
+    if(e.target && e.target.id === 'btn-go-print-intl'){
+      if(state.order.length === 0){
+        if(!confirm('明細が空ですが、印刷／PDFを続行しますか？')) return;
+      }
+      updateDeliveryNotes();
+      // Build EN customer + JP company
+      // Create a temporary L (English) only for title usage here
+      const L = { titleCustomer:'Customer Copy', titleCompany:'会社控え' };
+      buildPrintDocumentIntl();
+      const ok = openPrintWindow(document.getElementById('print-area').innerHTML);
+      if(ok) return;
+      requestAnimationFrame(()=>{
+        setTimeout(()=>{
+          try{ window.print(); }
+          catch(err){ alert('印刷ダイアログを開けませんでした。Safariで開いてからお試しください。'); }
+        }, 150);
+      });
+    }
+  }, {passive:false});
+
+  // ---- OCR ----
+  const pickOCR = $('btn-ocr-pick');
+  const fileOCR = $('file-ocr');
+  const ocrStatus = $('ocr-status');
+  const ocrPreview = $('ocr-preview');
+  const applyOCR = $('btn-ocr-apply');
+  let ocrCandidates = [];
+
+  function normCode(s){
+    return String(s||'').toLowerCase().replace(/\s+/g,'').replace(/[^a-z0-9\-]/g,'').replace(/-/g,'');
+  }
+  function parseQtyAround(text, code){
+    const esc = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(esc + String.raw`(?:\s*[x×]\s*(\d+)|\s+(\d+)\s*(?:個|本|pcs|点)?)`, 'i');
+    const m = text.match(re);
+    const n = m ? Number(m[1]||m[2]||'1') : 1;
+    return isFinite(n) && n>0 ? n : 1;
+  }
+
+  pickOCR?.addEventListener('click', ()=>{ fileOCR.value=''; fileOCR.click(); }, {passive:false});
+  fileOCR?.addEventListener('change', async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(!window.Tesseract){
+      alert('OCRライブラリの読み込み待ちです。数秒後に再試行してください。');
+      return;
+    }
+    ocrStatus.textContent = '解析中…（数秒〜十数秒）';
+    ocrPreview.innerHTML = '';
+    ocrCandidates = [];
+    try{
+      const img = URL.createObjectURL(file);
+      const { data } = await Tesseract.recognize(img, 'jpn+eng', { logger: m => { if(m.status) ocrStatus.textContent = `${m.status} ${Math.round((m.progress||0)*100)}%`; } });
+      const raw = (data && data.text) ? data.text : '';
+      ocrStatus.textContent = '抽出中…';
+      const text = raw.replace(/\r/g,' ').replace(/\t/g,' ').replace(/[、 ，]/g, ' ').replace(/\s{2,}/g,' ');
+
+      const dict = new Map();
+      for(const r of state.rows){ dict.set(normCode(r.code), r); }
+
+      const tokens = Array.from(new Set(text.match(/[A-Za-z0-9][A-Za-z0-9\-]{2,}/g) || []));
+      const picks = [];
+      for(const t of tokens){
+        const n = normCode(t);
+        const hit = dict.get(n);
+        if(hit){
+          const qty = parseQtyAround(text, t);
+          picks.push({code:hit.code, name:hit.name, price:hit.price, qty});
+        }
+      }
+
+      const merged = new Map();
+      for(const x of picks){
+        const key = x.code;
+        const prev = merged.get(key);
+        if(prev) prev.qty += x.qty;
+        else merged.set(key, {...x});
+      }
+      ocrCandidates = Array.from(merged.values());
+
+      if(ocrCandidates.length===0){
+        ocrStatus.textContent = '候補が見つかりませんでした。文字のコントラストを上げて再撮影してください。';
+        ocrPreview.innerHTML = `<div class="micro" style="color:#ef4444">※ OCR結果にコードが見当たりませんでした。印字された品番、ハイフンが明瞭な写真が有利です。</div>`;
+        return;
+      }
+
+      const list = document.createElement('div');
+      list.style.display='grid'; list.style.gap='8px';
+      ocrCandidates.forEach((c, idx)=>{
+        const row = document.createElement('div');
+        row.className='line';
+        row.innerHTML = `
+          <div class="title-two">
+            <div class="code"><input type="checkbox" data-i="${idx}" checked style="margin-right:6px">${c.code}</div>
+            <div class="name">${c.name || ''}</div>
+          </div>
+          <div class="ops">
+            <div class="price">${yen(c.price)}</div>
+            <label class="muted" style="font-size:12px">数量：</label>
+            <input data-i="${idx}" type="number" min="1" step="1" value="${c.qty}" class="qty-mini" inputmode="numeric" pattern="[0-9]*" aria-label="数量"/>
+          </div>
+        `;
+        row.querySelector('input[type="number"]').addEventListener('change',(e)=>{
+          const i = Number(e.target.getAttribute('data-i'));
+          const v = Math.max(1, parseInt(e.target.value||'1',10));
+          ocrCandidates[i].qty = v;
+        }, {passive:false});
+        list.appendChild(row);
+      });
+      ocrPreview.appendChild(list);
+      ocrStatus.textContent = `候補 ${ocrCandidates.length} 件`;
+    }catch(err){
+      console.error(err);
+      ocrStatus.textContent = 'OCRに失敗しました。画像を変えて再試行してください。';
+    }
+  }, {passive:false});
+
+  applyOCR?.addEventListener('click', ()=>{
+    const checks = ocrPreview.querySelectorAll('input[type="checkbox"][data-i]');
+    const selected = [];
+    checks.forEach(ch=>{
+      const i = Number(ch.getAttribute('data-i'));
+      if(ch.checked) selected.push(ocrCandidates[i]);
+    });
+    if(selected.length===0){
+      alert('追加する候補を選択してください。');
+      return;
+    }
+    for(const r of selected){
+      const ex = state.order.find(li=>li.code===r.code);
+      if(ex) ex.qty += r.qty;
+      else state.order.unshift({code:r.code,name:r.name,price:r.price,qty:r.qty});
+    }
+    renderOrder(); updateGrandTotal();
+    hide(sheetOCR);
+    alert(`${selected.length}件を明細に追加しました。`);
+  }, {passive:false});
+
+  // 初期描画
+  renderResults([]); renderOrder(); updateGrandTotal(); loadBundledProducts();
+
+
+// --- 受注者の永続化（localStorage） ---
+(function(){
+  const KEY = 'expo.orderPerson';
+  const el = document.getElementById('order-person');
+  if(!el) return;
+  // 初期値を復元
+  const saved = localStorage.getItem(KEY);
+  if(saved && Array.from(el.options).some(o=>o.value===saved)){
+    el.value = saved;
+  }
+  // 変更があれば保存
+  el.addEventListener('change', ()=>{
+    const v = el.value || '';
+    if(v) localStorage.setItem(KEY, v);
+    else localStorage.removeItem(KEY);
+  });
+})();
+
+
+
+
+
+
+
+// --- お客様情報クリアボタン（会計・帳合先も含めて全クリア、受注者のみ保持） ---
+(function(){
+  const btn = document.getElementById('btn-clear-cust');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    // 基本のお客様情報（存在チェックしながら空に）
+    const ids = [
+      'cust-name','cust-store','cust-phone','cust-tel','cust-note',
+      'cust-account-other','cust-addr','cust-dept'
+    ];
+    ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+
+    // 念のため、type="tel" の入力も空に
+    document.querySelectorAll('input[type="tel"]').forEach(el=> el.value='');
+
+    // 帳合先プルダウンのクリア
+    const custAccountSelect = document.getElementById('cust-account-select');
+    if(custAccountSelect) custAccountSelect.value = '';
+
+    // 当日会計のチェックと関連フィールドをリセット
+    const sameDay = document.getElementById('same-day-pay');
+    const sameDayFields = document.getElementById('same-day-fields');
+    const payMethod = document.getElementById('pay-method');
+    const deliveryMethod = document.getElementById('delivery-method');
+    const deliveryNote = document.getElementById('delivery-note');
+    if(sameDay) sameDay.checked = false;
+    if(sameDayFields) sameDayFields.style.display = 'none';
+    if(payMethod) payMethod.value = '';
+    if(deliveryMethod) deliveryMethod.value = '';
+    if(deliveryNote){ deliveryNote.textContent = ''; deliveryNote.style.display = 'none'; }
+
+    // 後日会計（受取時会計）のチェックと関連フィールドをリセット
+    const unpaidPay = document.getElementById('unpaid-pay');
+    const unpaidFields = document.getElementById('unpaid-fields');
+    const unpaidType = document.getElementById('unpaid-type');
+    const unpaidDeliveryMethod = document.getElementById('unpaid-delivery-method');
+    const unpaidDeliveryNote = document.getElementById('unpaid-delivery-note');
+    if(unpaidPay) unpaidPay.checked = false;
+    if(unpaidFields) unpaidFields.style.display = 'none';
+    if(unpaidType) unpaidType.value = '';
+    if(unpaidDeliveryMethod) unpaidDeliveryMethod.value = '';
+    if(unpaidDeliveryNote){ unpaidDeliveryNote.textContent = ''; unpaidDeliveryNote.style.display = 'none'; }
+
+    // 受注者はそのまま（localStorage保持）
+    alert('お客様情報（備考・電話・部署・住所含む）と会計・帳合先をクリアしました（受注者は保持）');
+  });
+})();
+
+
+
+// --- キーパッド位置トグル（左/右）+ 永続化 ---
+(function(){
+  const KEY = 'expo.keypadAlign';
+  const kb = document.getElementById('mini-kb-inline');
+  const btn = document.getElementById('btn-toggle-keypad');
+  if(!kb || !btn) return;
+
+  function applyAlign(v){
+    if(v === 'left'){
+      kb.classList.add('align-left');
+      btn.textContent = 'キーパッド：左';
+    }else{
+      kb.classList.remove('align-left');
+      btn.textContent = 'キーパッド：右';
+    }
+  }
+
+  // 初期適用
+  applyAlign(localStorage.getItem(KEY) || 'right');
+
+  // クリックでトグル
+  btn.addEventListener('click', ()=>{
+    const cur = kb.classList.contains('align-left') ? 'left' : 'right';
+    const next = (cur === 'left') ? 'right' : 'left';
+    localStorage.setItem(KEY, next);
+    applyAlign(next);
+  });
+})();
+
+
+
+// --- 当日会計／後日会計の表示制御 ---
+(function(){
+  const same = document.getElementById('same-day-pay');
+  const sameFields = document.getElementById('same-day-fields');
+  const unpaid = document.getElementById('unpaid-pay');
+  const unpaidFields = document.getElementById('unpaid-fields');
+
+  function apply(){
+    if(same && sameFields){
+      sameFields.style.display = same.checked ? '' : 'none';
+    }
+    if(unpaid && unpaidFields){
+      unpaidFields.style.display = unpaid.checked ? '' : 'none';
+    }
+  }
+  if(same) same.addEventListener('change', apply);
+  if(unpaid) unpaid.addEventListener('change', apply);
+  // 初期化（リロード時）
+  apply();
+})();
+
+
+
+// === 配送料金ボタンのイベント（フォールバック実装）===
+(function(){
+  const btn = document.getElementById('btn-add-shipping');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    try {
+      const val = prompt('配送料金（税抜）を入力してください。半角数字で。', '');
+      if(val === null) return;
+      const n = (typeof parseNumber === 'function') ? parseNumber(val) : (function(s){
+        s = String(s).replace(/[,\s]/g,'');
+        const v = Number(s);
+        return isFinite(v) ? v : NaN;
+      })(val);
+      if(!isFinite(n) || n < 0){
+        alert('0以上の数値を入力してください。');
+        return;
+      }
+      if(!window.state){ window.state = { order: [] }; }
+      if(!Array.isArray(state.order)) state.order = [];
+      const idx = state.order.findIndex(li => li && li._shipping === true);
+      if(idx >= 0){
+        state.order[idx].price = n;
+        state.order[idx].qty = 1;
+      }else{
+        state.order.push({ code: '送料', name: '配送料金', price: n, qty: 1, _shipping: true });
+      }
+      if(typeof renderOrder === 'function') renderOrder();
+      if(typeof updateGrandTotal === 'function') updateGrandTotal();
+    } catch(e){
+      console.error('配送料金ボタンエラー:', e);
+      alert('エラーが発生しました。コンソールを確認してください。');
+    }
+  }, {passive:false});
+})();
+
+
+
+// ==== 注文履歴（localStorage） ====
+(function(){
+  const KEY = 'expo.orderHistory.v1';
+  const MAX = 300; // 保持上限
+
+  // --- 要素
+  const openHistory = document.getElementById('btn-history');
+  const sheetHistory = document.getElementById('sheet-history');
+  const closeHistory = document.getElementById('close-history');
+  const listEl = document.getElementById('history-list');
+  const emptyEl = document.getElementById('history-empty');
+  const btnHistorySave = document.getElementById('btn-history-save');
+  const btnHistoryClear = document.getElementById('btn-history-clear');
+
+  if(!openHistory || !sheetHistory) return;
+
+  function showHistory(){ sheetHistory.classList.remove('hidden'); document.body.style.overflow='hidden'; renderHistory(); }
+  function hideHistory(){ sheetHistory.classList.add('hidden'); document.body.style.overflow=''; }
+
+  openHistory.addEventListener('click', showHistory, {passive:false});
+  closeHistory.addEventListener('click', hideHistory, {passive:false});
+
+  function loadAll(){
+    try{
+      const s = localStorage.getItem(KEY);
+      if(!s) return [];
+      const arr = JSON.parse(s);
+      return Array.isArray(arr) ? arr : [];
+    }catch(_){ return []; }
+  }
+  function saveAll(arr){
+    try{ localStorage.setItem(KEY, JSON.stringify(arr.slice(0,MAX))); }catch(_){ /* ignore */ }
+  }
+
+  function nowISO(){ return new Date().toISOString(); }
+  function formatJP(dtStr){
+    try{
+      const d = new Date(dtStr);
+      return d.toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    }catch(_){ return dtStr; }
+  }
+
+  function currentPayload(){
+    const payload = {
+      id: 'H' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      createdAt: nowISO(),
+      dataset: (typeof datasetName !== 'undefined' && datasetName.textContent) ? datasetName.textContent : '',
+      customer: {
+        name: (custName()?.value || ''),
+        account: getCustAccountValue(),
+        dept: (custDept()?.value || ''),
+        tel:  (custTel()?.value  || ''),
+        addr: (custAddr()?.value || ''),
+        note: (custNote()?.value || ''),
+      },
+      orderPerson: (orderPerson()?.value || ''),
+      sameDay: !!(sameDayPay()?.checked),
+      payMethod: (payMethod()?.value || ''),
+      delivery: (deliveryMethod()?.value || ''),
+      unpaid: !!(unpaidPay()?.checked),
+      unpaidType: (unpaidType()?.value || ''),
+      unpaidDelivery: (unpaidDeliveryMethod()?.value || ''),
+      items: state.order.map(li=>({code:li.code,name:li.name,price:li.price,qty:li.qty})),
+      total: state.order.reduce((a,b)=>a + b.price*b.qty, 0)
+    };
+    return payload;
+  }
+
+  function restorePayload(p){
+    if(custName()) custName().value = p.customer?.name || '';
+    if(custDept()) custDept().value = p.customer?.dept || '';
+    if(custTel())  custTel().value  = p.customer?.tel  || '';
+    if(custAddr()) custAddr().value = p.customer?.addr || '';
+    if(custNote()) custNote().value = p.customer?.note || '';
+
+    const sel = custAccountSelect?.();
+    if(sel){
+      const val = p.customer?.account || '';
+      const hasOpt = Array.from(sel.options).some(o=>o.value===val);
+      if(hasOpt){
+        sel.value = val;
+        const row = custAccountOtherRow?.(); if(row) row.style.display='none';
+        const o = custAccountOther?.(); if(o) o.value='';
+      }else if(val){
+        sel.value = 'その他';
+        const row = custAccountOtherRow?.(); if(row) row.style.display='';
+        const o = custAccountOther?.(); if(o) o.value = val;
+      }else{
+        sel.value = '';
+        const row = custAccountOtherRow?.(); if(row) row.style.display='none';
+        const o = custAccountOther?.(); if(o) o.value='';
+      }
+    }
+
+    if(sameDayPay()){
+      sameDayPay().checked = !!p.sameDay;
+      sameDayFields().style.display = p.sameDay ? '' : 'none';
+    }
+    if(payMethod()) payMethod().value = p.payMethod || '';
+    if(deliveryMethod()) deliveryMethod().value = p.delivery || '';
+
+    if(unpaidPay()){
+      unpaidPay().checked = !!p.unpaid;
+      unpaidFields().style.display = p.unpaid ? '' : 'none';
+    }
+    if(unpaidType()) unpaidType().value = p.unpaidType || '';
+    if(unpaidDeliveryMethod()) unpaidDeliveryMethod().value = p.unpaidDelivery || '';
+
+    if(orderPerson()){
+      orderPerson().value = p.orderPerson || '';
+      try{
+        if(p.orderPerson) localStorage.setItem('expo.orderPerson', p.orderPerson);
+      }catch(_){}
+    }
+
+    state.order = Array.isArray(p.items) ? p.items.map(x=>({
+      code:String(x.code||''),
+      name:String(x.name||''),
+      price:Number(x.price||0),
+      qty:Math.max(1, parseInt(x.qty||1,10))
+    })) : [];
+    renderOrder(); updateGrandTotal();
+  }
+
+  function renderHistory(){
+    const arr = loadAll().sort((a,b)=> (a.createdAt<b.createdAt?1:-1));
+    listEl.innerHTML = '';
+    emptyEl.style.display = arr.length ? 'none' : '';
+
+    arr.forEach((h)=>{
+      const el = document.createElement('div');
+      el.className = 'line';
+      const title = `${formatJP(h.createdAt)}｜${(h.customer?.name||'（無題）')}${h.customer?.account? '｜'+h.customer.account : ''}`;
+      const info  = `${h.items?.length||0} 件｜合計 ${yen(h.total||0)}${h.dataset? '｜'+h.dataset : ''}`;
+      el.innerHTML = `
+        <div class="title-two">
+          <div class="code" title="${title}">${title}</div>
+          <div class="name">${info}</div>
+        </div>
+        <div class="ops">
+          <button type="button" class="btn" data-act="preview" data-id="${h.id}">明細</button>
+          <button type="button" class="btn accent" data-act="restore" data-id="${h.id}">復元</button>
+          <button type="button" class="btn" data-act="print" data-id="${h.id}">PDF再作成</button>
+          <button type="button" class="btn danger" data-act="delete" data-id="${h.id}">削除</button>
+        </div>
+      `;
+      listEl.appendChild(el);
+    });
+
+    listEl.onclick = (ev)=>{
+      const btn = ev.target.closest('button[data-act]');
+      if(!btn) return;
+      const id = btn.getAttribute('data-id');
+      const act = btn.getAttribute('data-act');
+      const arr2 = loadAll();
+      const item = arr2.find(x=>x.id===id);
+      if(!item) return;
+
+      if(act==='restore'){
+        restorePayload(item);
+        alert('履歴を復元しました。');
+      }else if(act==='delete'){
+        if(confirm('この履歴を削除しますか？')){
+          saveAll(arr2.filter(x=>x.id!==id));
+          renderHistory();
+        }
+      }else if(act==='preview'){
+        const detail = item.items.map(it=>`${it.code}｜${it.name||''} ×${it.qty}｜${yen(it.price)} → ${yen(it.price*it.qty)}`).join('\n');
+        alert(`${item.customer?.name||'（無題）'}\n${formatJP(item.createdAt)}\n${detail}\n---\n合計：${yen(item.total||0)}`);
+      }else if(act==='print'){
+        restorePayload(item);
+        updateDeliveryNotes?.();
+        const sheetPrint = document.getElementById('sheet-print');
+        if(sheetPrint){ sheetPrint.classList.remove('hidden'); document.body.style.overflow='hidden'; }
+      }
+    };
+  }
+
+  function saveCurrentToHistory(){
+    const payload = {
+      id: 'H' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      createdAt: new Date().toISOString(),
+      dataset: (typeof datasetName !== 'undefined' && datasetName.textContent) ? datasetName.textContent : '',
+      customer: {
+        name: (custName()?.value || ''),
+        account: getCustAccountValue(),
+        dept: (custDept()?.value || ''),
+        tel:  (custTel()?.value  || ''),
+        addr: (custAddr()?.value || ''),
+        note: (custNote()?.value || ''),
+      },
+      orderPerson: (orderPerson()?.value || ''),
+      sameDay: !!(sameDayPay()?.checked),
+      payMethod: (payMethod()?.value || ''),
+      delivery: (deliveryMethod()?.value || ''),
+      unpaid: !!(unpaidPay()?.checked),
+      unpaidType: (unpaidType()?.value || ''),
+      unpaidDelivery: (unpaidDeliveryMethod()?.value || ''),
+      items: state.order.map(li=>({code:li.code,name:li.name,price:li.price,qty:li.qty})),
+      total: state.order.reduce((a,b)=>a + b.price*b.qty, 0)
+    };
+    const arr = (function(){ try{ return JSON.parse(localStorage.getItem(KEY)||'[]'); }catch(_){ return []; } })();
+    arr.unshift(payload);
+    const seen = new Set(); const dedup = [];
+    for(const h of arr){
+      const key = `${h.customer?.name||''}|${h.total||0}|${(h.items?.length)||0}`;
+      if(seen.has(key)) continue;
+      seen.add(key); dedup.push(h);
+      if(dedup.length >= MAX) break;
+    }
+    try{ localStorage.setItem(KEY, JSON.stringify(dedup)); }catch(_){}
+    return true;
+  }
+
+  if(btnHistorySave){
+    btnHistorySave.addEventListener('click', ()=>{
+      const ok = saveCurrentToHistory();
+      if(ok){ alert('履歴に保存しました。'); renderHistory(); }
+    }, {passive:false});
+  }
+
+  if(btnHistoryClear){
+    btnHistoryClear.addEventListener('click', ()=>{
+      if(confirm('履歴をすべて削除しますか？')){
+        try{ localStorage.setItem(KEY, JSON.stringify([])); }catch(_){}
+        renderHistory();
+      }
+    }, {passive:false});
+  }
+
+  // 印刷ボタン押下をキャプチャ段階でフックして自動保存
+  document.addEventListener('click', (e)=>{
+    const t = e.target; if(!t) return;
+    const id = t.id || '';
+    if(id === 'btn-print' || id === 'btn-go-print-intl'){
+      try{ saveCurrentToHistory(); }catch(_){}
+    }
+  }, true);
+
+})(); // 履歴機能 ここまで
+
+</script>
+</body>
+</html>
