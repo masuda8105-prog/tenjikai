@@ -68,6 +68,20 @@
   .bottom-inner{max-width:1100px;margin:0 auto;padding:8px var(--pad);display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
   .micro{font-size:12px;color:#6b7280}
   .hidden{display:none !important}
+  .customer-flash{
+    position:fixed;inset:0;z-index:80;pointer-events:none;opacity:0;
+    background:rgba(255,255,255,.12) url('./customer-info-flash.png') center / contain no-repeat;
+    transform:scale(1.02);
+  }
+  .customer-flash.show{
+    animation:customerFlash 3.2s ease-in-out both;
+  }
+  @keyframes customerFlash{
+    0%{opacity:0;transform:scale(1.04);filter:blur(1px)}
+    18%{opacity:.32;transform:scale(1.01);filter:blur(0)}
+    72%{opacity:.24;transform:scale(1)}
+    100%{opacity:0;transform:scale(1);filter:blur(1px)}
+  }
   .ops{display:flex;align-items:center;gap:8px}
   .ops .price{font-weight:800;white-space:nowrap;font-size:14px}
   .ops .qty-mini{width:58px !important; min-height:36px !important; padding:6px 8px !important; font-size:14px !important;}
@@ -81,7 +95,7 @@
   @page { size: A4; margin: 0; }
   @media print {
     html, body{margin:0 !important;padding:0 !important;background:#fff}
-    .topbar, .container, .bottom-bar, .sheet{display:none !important}
+    .topbar, .container, .bottom-bar, .sheet, .customer-flash{display:none !important}
     #print-area{display:block !important}
     .print-page{page-break-after:always;padding:18mm 14mm;font-size:12px}
     .print-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8mm}
@@ -161,6 +175,7 @@ a[href^="fax"], a[href^="fax"]:visited {
 </style>
 </head>
 <body>
+  <div id="customer-flash" class="customer-flash" aria-hidden="true"></div>
   <div class="topbar">
     <div class="topbar-inner">
       <span id="dataset-name" class="dataset" aria-live="polite">未読込</span>
@@ -472,6 +487,7 @@ TEL：03-3832-0051　FAX：03-3834-0667</textarea></div>
   const closePrint = $('close-print');
   const openOCR = $('btn-ocr');
   const closeOCR = $('close-ocr');
+  const customerFlash = $('customer-flash');
 
   // お客様・会社情報
   const custName = ()=>$('cust-name');
@@ -924,10 +940,19 @@ TEL：03-3832-0051　FAX：03-3834-0667</textarea></div>
   // ---- シートの開閉 ----
   function show(el){ el.classList.remove('hidden'); document.body.style.overflow='hidden'; }
   function hide(el){ el.classList.add('hidden'); document.body.style.overflow=''; }
+  function showCustomerFlash(){
+    if(!customerFlash) return;
+    customerFlash.classList.remove('show');
+    void customerFlash.offsetWidth;
+    customerFlash.classList.add('show');
+  }
 
   openSettings?.addEventListener('click', ()=> show(sheetSettings), {passive:false});
   closeSettings?.addEventListener('click', ()=> hide(sheetSettings), {passive:false});
-  openPrint?.addEventListener('click', ()=> show(sheetPrint), {passive:false});
+  openPrint?.addEventListener('click', ()=>{
+    showCustomerFlash();
+    show(sheetPrint);
+  }, {passive:false});
   closePrint?.addEventListener('click', ()=> hide(sheetPrint), {passive:false});
   openOCR?.addEventListener('click', ()=>{
     show(sheetOCR);
